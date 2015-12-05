@@ -23,6 +23,7 @@ import urllib2
 import json
 import Queue
 import sqlite3
+import urllib
 
 import electrum_fair
 electrum_fair.set_verbosity(True)
@@ -43,7 +44,7 @@ cb_password = config.get('callback','password')
 
 wallet_path = config.get('electrum','wallet_path')
 xpub = config.get('electrum','xpub')
-
+#Fix Me : Move the needed of this to the config file
 seed = "travel nowhere air position hill peace suffer parent beautiful rise blood power home crumble teach"
 password = "secret"
 
@@ -233,23 +234,30 @@ def db_thread():
         for item in data:
             oid, address, paid, item_number = item
             paid = bool(paid)
-            headers = {'content-type':'application/json'}
+            headers = {'content-type':'application/html'}
             data_json = { 'address':address, 'password':cb_password, 'paid':paid, 'item_number': item_number }
-            data_json = json.dumps(data_json)
+#            data_json = json.dumps(data_json)
+            data_encoded =  urllib.urlencode(data_json)
             url = received_url if paid else expired_url
             if not url:
                 continue
-            req = urllib2.Request(url, data_json, headers)
+            req = urllib2.Request(url, data_encoded, headers)
             try:
                 response_stream = urllib2.urlopen(req)
-                print 'Got Response for %s' % address
+		print response_stream.info()
+                print 'Got Response %s \n for %s' %(response_stream.read(), address)
                 cur.execute("UPDATE electrum_payments SET processed=1 WHERE oid=%d;"%(oid))
-            except urllib2.HTTPError:
-                print "cannot do callback", data_json
+            except urllib2.HTTPError as e:
+                print "ERROR: cannot do callback", data_json
+		print "ERROR: code : %s" %e.code
+                print e.read() 
+            except urllib2.URLError as e:
+		print 'ERROR: Can not contact with %s' %url
+		print 'ERROR: Reason : %s ' % e.reason
             except ValueError, e:
                 print e
-                print "cannot do callback", data_json
-        
+                print "ERROR: cannot do callback", data_json
+
         conn.commit()
 
     conn.close()
