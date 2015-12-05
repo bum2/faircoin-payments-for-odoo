@@ -1,0 +1,15 @@
+<openerp>
+   <data>
+      <template id="payment_form">
+          <t t-call="website.layout">
+              <t t-set="title">Faircoin Payment</t>
+              <div class="oe_structure">
+                    <div class="container">
+                        <p><t t-esc="address"/></p>
+                        <p><t t-esc="amount"/></p>
+                    </div>
+              </div>
+	  </t>
+       </template>
+   </data>
+</openerp>	
