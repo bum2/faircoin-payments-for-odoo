@@ -102,7 +102,7 @@ def on_wallet_update():
                 if o_address == addr:
                     value += o_value
 
-        s = (value)/1.e8
+        s = (value)/1.e6
         print "balance for %s:"%addr, s, requested_amount
         if s>= requested_amount: 
             print "payment accepted", addr
@@ -201,7 +201,7 @@ def db_thread():
                 continue
             else:
                 with wallet.lock:
-                    print "subscribing to %s"%addr
+                    print "subscribing to %s requesting %f fairs" %(addr,float(amount))
                     pending_requests[addr] = {'requested':float(amount), 'confirmations':int(confirmations)}
                     wallet.synchronizer.subscribe_to_addresses([addr])
                     wallet.up_to_date = False
@@ -222,9 +222,9 @@ def db_thread():
             addr, amount, confs, minutes, item_number = params
             sql = "INSERT INTO electrum_payments (address, amount, confirmations, received_at, expires_at, paid, processed, item_number)"\
                 + " VALUES ('%s', %.8f, %d, datetime('now'), datetime('now', '+%d Minutes'), NULL, NULL, '%s');"%(addr, amount, confs, minutes, item_number)
-            print sql
-            cur.execute(sql)
+#            print sql
 
+            cur.execute(sql)
         # set paid=0 for expired requests 
         cur.execute("""UPDATE electrum_payments set paid=0 WHERE expires_at < CURRENT_TIMESTAMP and paid is NULL;""")
 
@@ -237,7 +237,7 @@ def db_thread():
             headers = {'content-type':'application/html'}
             data_json = { 'address':address, 'password':cb_password, 'paid':paid, 'item_number': item_number }
 #            data_json = json.dumps(data_json)
-            data_encoded =  urllib.urlencode(data_json)
+#            data_encoded =  urllib.urlencode(data_json)
 	    print "Data encoded : %s" %data_encoded
             url = received_url if paid else expired_url
             if not url:
@@ -248,6 +248,7 @@ def db_thread():
 		print response_stream.info()
                 print 'Got Response %s \n in %s for address %s' %(response_stream.read(), url, address)
                 cur.execute("UPDATE electrum_payments SET processed=1 WHERE oid=%d;"%(oid))
+                
             except urllib2.HTTPError as e:
                 print "ERROR: cannot do callback", data_json
 		print "ERROR: code : %s" %e.code
