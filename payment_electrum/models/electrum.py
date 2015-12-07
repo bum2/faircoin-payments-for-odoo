@@ -183,13 +183,14 @@ class TxElectrum(osv.Model):
     # --------------------------------------------------
 
     def _electrum_form_get_tx_from_data(self, cr, uid, data, context=None):
-        reference, txn_id = data.get('item_number'), data.get('item_number')
-        if not reference or not txn_id:
-            error_msg = 'Electrum: received data with missing reference (%s) or txn_id (%s)' % (reference, txn_id)
+	_logger.info('Begin electrum_form_get_tx. Data received %s' %data)  # debug        
+	reference = data.get('item_number')
+        paid = data.get("paid")
+        if not reference:
+            error_msg = 'Electrum: received data with missing reference (%s)' %reference
             _logger.error(error_msg)
-            #raise ValidationError(error_msg)
+            raise ValidationError(error_msg)
 	    return	
-        # find tx -> @TDENOTE use txn_id ?
         tx_ids = self.pool['payment.transaction'].search(cr, uid, [('reference', '=', reference)], context=context)
         if not tx_ids or len(tx_ids) > 1:
             error_msg = 'Electrum: received data for reference %s' % (reference)
@@ -202,6 +203,7 @@ class TxElectrum(osv.Model):
         return self.browse(cr, uid, tx_ids[0], context=context)
 
     def _electrum_form_get_invalid_parameters(self, cr, uid, tx, data, context=None):
+        _logger.info('Begin electrum_form_invalid_parameters. Data received : %s ' %data)
         invalid_parameters = []
         """if data.get('notify_version')[0] != '1.0':
             _logger.warning(
@@ -240,29 +242,47 @@ class TxElectrum(osv.Model):
                 invalid_parameters.append(('receiver_email', data.get('receiver_email'), tx.acquirer_id.electrum_email_account))
 	"""
         return invalid_parameters
-
+	
     def _electrum_form_validate(self, cr, uid, tx, data, context=None):
-        """status = data.get('payment_status')
-        data = {
-            'acquirer_reference': data.get('txn_id'),
-            'electrum_txn_type': data.get('payment_type'),
-            'partner_reference': data.get('payer_id')
-        }
+        _logger.info('Begin electrum_form_invalid_parameters. Data received : %s ' %data)
+        status = data.get('payment_status')
+	reference = data.get('item_number')
+	_logger.info("electrum_form_validate Reference %s: Status : %s" %(reference,status))
+        tx_ids = self.pool['payment.transaction'].search(cr, uid, [('reference', '=', reference)], context=context)
+        if not tx_ids or len(tx_ids) > 1:
+            error_msg = 'Electrum: received data for reference %s' % (reference)
+            if not tx_ids:
+                error_msg += '; no order found'
+            else:
+                error_msg += '; multiple order found'
+            _logger.error(error_msg)
+            raise ValidationError(error_msg)
+#	tx = tx_ids[0] #Esto no crea un objeto tx, sólo la id como int...
+        tx = self.pool.get('payment.transaction').browse(cr, uid, tx_ids[0], context=context)
+
         if status in ['Completed', 'Processed']:
             _logger.info('Validated Electrum payment for tx %s: set as done' % (tx.reference))
             data.update(state='done', date_validate=data.get('payment_date', fields.datetime.now()))
-            return tx.write(data)
         elif status in ['Pending', 'Expired']:
-            _logger.info('Received notification for Electrum payment %s: set as pending' % (tx.reference))
-            data.update(state='pending', state_message=data.get('pending_reason', ''))
-            return tx.write(data)
+            _logger.info('Received notification for Electrum payment %s: set as cancelled' % (tx.reference))
+            data.update(state='cancel', state_message=data.get('cancelling_reason', ''))
+	elif status in ['']:
+            _logger.info('Validated transfer payment for tx %s: set as pending' % (tx.reference))
+            data.update(state='pending')
+	elif status in ['Draft']:
+            _logger.info('Validated transfer payment for tx %s: set as pending' % (tx.reference))
+            data.update(state='pending')
+	elif status in [None]:
+            _logger.info('Validated transfer payment for tx %s: set as pending' % (tx.reference))
+            data.update(state='pending')
         else:
-            error = 'Received unrecognized status for Electrum payment %s: %s, set as error' % (tx.reference, status)
+            error = 'Received unrecognized status for Electrum payment %s: %s, set as error' % (reference, status)
             _logger.info(error)
             data.update(state='error', state_message=error)
-            return tx.write(data)"""
-        _logger.info('Validated transfer payment for tx %s: set as pending' % (tx.reference))
-        return tx.write({'state': 'pending'})
+
+        return tx.write(data)
+
+
 
     # --------------------------------------------------
     # SERVER2SERVER RELATED METHODS

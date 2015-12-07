@@ -129,7 +129,7 @@ def process_request(amount, confirmations, expires_in, password, item_number):
         expires_in = float(expires_in)
     except Exception:
         return "incorrect parameters"
-
+#ToDo: Buscar primero direcciones sin usar y balance cero para reusar, ver dbThread
     account = wallet.default_account()
     pubkeys = account.derive_pubkeys(0, num)
     addr = account.pubkeys_to_address(pubkeys)
@@ -238,6 +238,7 @@ def db_thread():
             data_json = { 'address':address, 'password':cb_password, 'paid':paid, 'item_number': item_number }
 #            data_json = json.dumps(data_json)
             data_encoded =  urllib.urlencode(data_json)
+	    print "Data encoded : %s" %data_encoded
             url = received_url if paid else expired_url
             if not url:
                 continue
@@ -245,7 +246,7 @@ def db_thread():
             try:
                 response_stream = urllib2.urlopen(req)
 		print response_stream.info()
-                print 'Got Response %s \n for %s' %(response_stream.read(), address)
+                print 'Got Response %s \n in %s for address %s' %(response_stream.read(), url, address)
                 cur.execute("UPDATE electrum_payments SET processed=1 WHERE oid=%d;"%(oid))
             except urllib2.HTTPError as e:
                 print "ERROR: cannot do callback", data_json
@@ -258,7 +259,9 @@ def db_thread():
                 print e
                 print "ERROR: cannot do callback", data_json
 
-        conn.commit()
+# ToDo: Coger las direcciones procesadas y con balance cero y marcarlas como no procesadas para que se puedan reutilizar y no subir demasiado el gap.limit. Unsubscrib address y cancelar el request de electrum-fair
+
+    conn.commit()
 
     conn.close()
     print "database closed"
