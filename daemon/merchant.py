@@ -46,6 +46,7 @@ wallet_path = config.get('electrum','wallet_path')
 #xpub = config.get('electrum','xpub')
 seed = config.get('electrum','seed')
 password = config.get('electrum', 'password')
+market_address = config.get('market','FAI_address')
 
 pending_requests = {}
 
@@ -91,6 +92,11 @@ def on_wallet_update():
             tx = wallet.transactions.get(tx_hash)
             if not tx: continue
             if wallet.get_confirmations(tx_hash)[0] < requested_confs: continue
+            try:
+        	if not tx.outputs: continue
+            except Exception:
+                continue
+
             for o in tx.outputs:
                 o_type, o_address, o_value = o
                 if o_address == addr:
@@ -230,9 +236,9 @@ def db_thread():
             paid = bool(paid)
             headers = {'content-type':'application/html'}
             data_json = { 'address':address, 'password':cb_password, 'paid':paid, 'item_number': item_number }
-#            data_json = json.dumps(data_json)
-#            data_encoded =  urllib.urlencode(data_json)
-#	    print "Data encoded : %s" %data_encoded
+            data_json = json.dumps(data_json)
+            data_encoded =  urllib.urlencode(data_json)
+	    print "Data encoded : %s" %data_encoded
             url = received_url if paid else expired_url
             if not url:
                 continue
@@ -242,7 +248,6 @@ def db_thread():
 		print response_stream.info()
                 print 'Got Response %s \n in %s for address %s' %(response_stream.read(), url, address)
                 cur.execute("UPDATE electrum_payments SET processed=1 WHERE oid=%d;"%(oid))
-                
             except urllib2.HTTPError as e:
                 print "ERROR: cannot do callback", data_json
 		print "ERROR: code : %s" %e.code
