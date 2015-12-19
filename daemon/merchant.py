@@ -238,7 +238,7 @@ def db_thread():
             data_json = { 'address':address, 'password':cb_password, 'paid':paid, 'item_number': item_number }
 #            data_json = json.dumps(data_json)
 #            data_encoded =  urllib.urlencode(data_json)
-	    print "Data encoded : %s" %data_encoded
+#	    print "Data encoded : %s" %data_encoded
             url = received_url if paid else expired_url
             if not url:
                 continue
