@@ -129,15 +129,18 @@ def process_request(amount, confirmations, expires_in, password, item_number):
         expires_in = float(expires_in)
     except Exception:
         return "incorrect parameters"
-#ToDo: Buscar primero direcciones sin usar y balance cero para reusar, ver dbThread
+    balance = 1	
     account = wallet.default_account()
-    pubkeys = account.derive_pubkeys(0, num)
-    addr = account.pubkeys_to_address(pubkeys)
-    num += 1
-    print "Address : %s" %addr
+    while (bool(balance)):
+        pubkeys = account.derive_pubkeys(0, num)
+        addr = account.pubkeys_to_address(pubkeys)
+        num += 1
+        c, x, u = wallet.get_addr_balance(addr) 
+        balance = c + x + u
+	print "Address : %s -- Balance: " %addr, balance
+
     out_queue.put( ('request', (addr, amount, confirmations, expires_in, item_number) ))
     return addr
-
 
 
 def do_dump(password):
@@ -259,7 +262,8 @@ def db_thread():
                 print e
                 print "ERROR: cannot do callback", data_json
 
-# ToDo: Coger las direcciones procesadas y con balance cero y marcarlas como no procesadas para que se puedan reutilizar y no subir demasiado el gap.limit. Unsubscrib address y cancelar el request de electrum-fair
+
+
 
     conn.commit()
 
