@@ -288,7 +288,7 @@ if __name__ == '__main__':
     # create wallet
     storage = electrum_fair.WalletStorage(wallet_path)
     if not storage.file_exists:
-        print "creating wallet file"
+        print "creating wallet file from seed: %s -- and password : %s" %(seed,password)
 #       wallet = electrum_fair.wallet.Wallet.from_xpub(xpub, storage)
 #       def from_seed(self, seed, password, storage):
         wallet = electrum_fair.wallet.Wallet.from_seed(seed, password, storage)
