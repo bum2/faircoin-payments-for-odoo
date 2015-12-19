@@ -8,6 +8,7 @@ import logging
 import pprint
 import urllib
 import urllib2
+import urlparse
 import werkzeug
 import socket
 
@@ -18,6 +19,8 @@ from openerp.http import request
 
 _logger = logging.getLogger(__name__)
 
+#ToDo: El problema mayor del script es que nos salimos del "flujo" de odoo en el método de pago, habría que integrar eso en Odoo. La página de validación que usa el módulo payment_transfer sólo sale en métodos manuales, y en el método "automático" se espera que la página se renderice fuera de Odoo y retorne cuando la transacción ha sido realizada o expirada.
+# ¿¿¿¿¿ Cómo renderizar una página en payment_form de forma que se redirija tras llegar un mensaje válido a ipn o a cancel?????? ipn o cancel retornan al Demonio, no al usuario!
 
 class ElectrumController(http.Controller):
     _notify_url = '/payment/electrum/ipn/'
@@ -25,11 +28,11 @@ class ElectrumController(http.Controller):
     _cancel_url = '/payment/electrum/cancel/'
     _payment_form_url = '/payment/electrum/payment_form/'
     _feedback_url = '/payment/electrum/feedback'
-
+# ToDo: Esto habrá que pasarlo a la configuración de odoo
     merchant_host = 'http://localhost:8059'
     merchant_password = 'a'
-    expires_in = 5
-    confirmations = 6	
+    expires_in = 60 # minutes
+    confirmations = 1	
     
     def _get_return_url(self, **post):
         """ Extract the return URL from the data coming from electrum. """
@@ -38,9 +41,9 @@ class ElectrumController(http.Controller):
             custom = json.loads(post.pop('custom', False) or '{}')
             return_url = custom.get('return_url', '/')
         return return_url
-
+# vieja función de paypal, sin uso? Es un ejemplo de verificación con el server remoto, puede servir en el futuro para más seguridad
     def electrum_validate_data(self, **post):
-        """ Electrum IPN: three steps validation to ensure data correctness
+        """Electrum IPN: three steps validation to ensure data correctness
 
         - step 1: return an empty HTTP 200 response -> will be done at the end
            by returning ''
@@ -64,10 +67,11 @@ class ElectrumController(http.Controller):
         elif resp == 'INVALID':
             _logger.warning('Electrum: answered INVALID on data verification')
         else:
-            _logger.warning('Electrum: unrecognized electrum answer, received %s instead of VERIFIED or INVALID' % resp.text)"""
+            _logger.warning('Electrum: unrecognized electrum answer, received %s instead of VERIFIED or INVALID' % resp.text)
         cr, uid, context = request.cr, request.uid, request.context
-	res = False
-        reference = post.get('item_number')
+	res = False """
+        cr, uid, context = request.cr, SUPERUSER_ID, request.context        
+	reference = post.get('item_number')
         tx = None
         if reference:
             tx_ids = request.registry['payment.transaction'].search(cr, uid, [('reference', '=', reference)], context=context)
@@ -81,31 +85,60 @@ class ElectrumController(http.Controller):
 	#Payment expired
             _logger.info('Electrum: payment expired')  	
 	    res = request.registry['payment.transaction'].cancel_url(cr, SUPERUSER_ID, post, 'electrum', context=context)
-        return res 
+        return res
 
+    # LLamado por el demonio para confirmar una orden
     @http.route('/payment/electrum/ipn', type='http', auth='none', methods=['POST'])
     def electrum_ipn(self, **post):
-        """ Electrum IPN. """
-        _logger.info('Beginning Electrum IPN form_feedback with post data %s', pprint.pformat(post))  # debug
-        self.electrum_validate_data(**post)
-        return ''
+        _logger.info('Beginning Electrum IPN form_feedback')  # debug
+        cr, uid, context = request.cr, SUPERUSER_ID, request.context
+        data_raw = request.httprequest.get_data()	
+	data_decoded = urlparse.parse_qs(data_raw)
+	_logger.info('Data decoded : %s' %data_decoded)
+        data_post = {
+            'payment_status': 'Completed',
+	    'item_number' : data_decoded['item_number']	
+         }	
+	_logger.info('data posted to : %s' %data_post)
+        request.registry['payment.transaction'].form_feedback(cr, uid, data_post, 'electrum', context)
 
+        return 'OK'
+
+    # Sin uso, creo, sería la url donde retorna paypal...
     @http.route('/payment/electrum/dpn', type='http', auth="none", methods=['POST'])
     def electrum_dpn(self, **post):
-        """ Electrum DPN """
         _logger.info('Beginning Electrum DPN form_feedback with post data %s', pprint.pformat(post))  # debug
         return_url = self._get_return_url(**post)
         self.electrum_validate_data(**post)
         return werkzeug.utils.redirect(return_url)
 
+    # LLamado por el daemon para cancelar una orden 
     @http.route('/payment/electrum/cancel', type='http', auth="none", methods=['POST'])
     def electrum_cancel(self, **post):
-        """ When the user cancels its Electrum payment: GET on this route """
+	_logger.info('Beginning electrum_cancel') # debug
         cr, uid, context = request.cr, SUPERUSER_ID, request.context
-        _logger.info('Beginning Electrum cancel with post data %s', pprint.pformat(post))  # debug
-        return_url = self._get_return_url(**post)
-        return werkzeug.utils.redirect(return_url)
+        data_raw = request.httprequest.get_data()	
+	data_decoded = urlparse.parse_qs(data_raw)
+	_logger.info('Data decoded : %s' %data_decoded)
+        data_post = {
+            'payment_status': 'Expired',
+	    'cancelling_reason' : 'Funds has not arrive at time',
+	    'item_number' : data_decoded['item_number']	
+         }	
+	_logger.info('data posted to : %s' %data_post)
+        request.registry['payment.transaction'].form_feedback(cr, uid, data_post, 'electrum', context)
 
+	return 'OK'
+
+    @http.route('/payment/electrum/form_validate', type='http', auth='none')
+    def electrum_form_feedback(self, **post):
+        cr, uid, context = request.cr, SUPERUSER_ID, request.context
+        _logger.info('Beginning form_feedback with post data %s', pprint.pformat(post))  # debug
+#        request.registry['payment.transaction'].form_feedback(cr, uid, post, 'electrum', context)
+
+        return werkzeug.utils.redirect(post.pop('return_url', '/'))
+
+    # LLamado por Odoo tras elegir Electrum como método de pago 
     @http.route('/payment/electrum/payment_form', type='http', auth="none", website="True")
     def electrum_payment_form(self, **post):
 	""" Render the faircoin payment screen and notify the daemon with a new request """
@@ -129,36 +162,37 @@ class ElectrumController(http.Controller):
         server = jsonrpclib.Server(self.merchant_host)
         try:
             f = getattr(server, 'request')
-        except socket.error:
-            print "Server not running"
+        except socket.error, (value,message): 
+            _logger.warning("ERROR: Can not connect with the Daemon %s:" %message)
             return_url = self._get_return_url(**post)
             return werkzeug.utils.redirect(return_url)
         try:
+	    # Here we go
             address = f(amount, self.confirmations, self.expires_in, self.merchant_password, reference)
-        except socket.error:
-            print "Server not running"
+        except socket.error, (value,message): 
+            _logger.warning("ERROR: Can not connect with the Daemon %s:" %message)
             return_url = self._get_return_url(**post)
             return werkzeug.utils.redirect(return_url)
     
         _logger.info('Faircoin address received %s' % address) # debug
          
- 
-        #return "Hello, world"
-	msg = "<h1>Faircoin payment</h1><br><br><p>Please complete the faircoin transaction as follow:</p><br><br><b>'address'</b>: %s <br><b>'amount'</b> : %s," %(address,amount)
-        return msg
 
 
-        # Render the qr code
+	msg = "<h1>Faircoin payment</h1><br><br><p>Please complete the faircoin transaction as follows:</p><br><br><b>'address'</b>: %s <br><b>'amount'</b> : %s," %(address,amount)
+        # ToDo: Render the qr code
+	# Empty the cart
+	#order = request.website.sale_get_order()
+        #if order:
+            #for line in order.website_order_line:
+       
+ 	
+        request.registry['payment.transaction'].form_feedback(cr, uid, post, 'electrum', context)
+#        return werkzeug.utils.redirect(post.pop('return_url', '/payment/electrum/feedback/'))
+	return msg
 
-	# ¿Qué debe retornar?
-	http.request.render('payment_electrum.electrum_payment_form', {
+	# FixMe. Con plantilla debe retornar algo así, pero por alguna razón no funciona. Ver views/payment_form.xml
+	return http.request.render('payment_electrum.payment_form', {
                 'amount' : amount,
                 'address' : address
 		})
-        #return_url = self._get_return_url(**post)
-        #return werkzeug.utils.redirect(return_url)
 
-        cr, uid, context = request.cr, SUPERUSER_ID, request.context
-        _logger.info('Beginning form_feedback with post data %s', pprint.pformat(post))  # debug
-        request.registry['payment.transaction'].form_feedback(cr, uid, post, 'electrum', context)
-        return werkzeug.utils.redirect(post.pop('return_url', '/payment/electrum/feedback/'))

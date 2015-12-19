@@ -26,12 +26,13 @@ class AcquirerElectrum(osv.Model):
    
         if environment == 'prod':
             return {
-                'electrum_payment_form_url': 'http://localhost:8069/payment/electrum/payment_form',
+                'electrum_payment_form_url': '/payment/electrum/payment_form',
                 'electrum_daemon_url': 'http://localhost:8059',
             }
+#        base_url = self.pool['ir.config_parameter'].get_param(cr, SUPERUSER_ID, 'web.base.url')
         else:
             return {
-                'electrum_payment_form_url': 'http://localhost:8069/payment/electrum/payment_form',
+                'electrum_payment_form_url': '/payment/electrum/payment_form',
                 'electrum_daemon_url': 'http://localhost:8059',
             }
 
@@ -250,37 +251,37 @@ class TxElectrum(osv.Model):
 	_logger.info("electrum_form_validate Reference %s: Status : %s" %(reference,status))
         tx_ids = self.pool['payment.transaction'].search(cr, uid, [('reference', '=', reference)], context=context)
         if not tx_ids or len(tx_ids) > 1:
-            error_msg = 'Electrum: received data for reference %s' % (reference)
+            error_msg = 'Faircoin Electrum: received data for reference %s' % (reference)
             if not tx_ids:
                 error_msg += '; no order found'
             else:
                 error_msg += '; multiple order found'
             _logger.error(error_msg)
             raise ValidationError(error_msg)
-#	tx = tx_ids[0] #Esto no crea un objeto tx, sólo la id como int...
-        tx = self.pool.get('payment.transaction').browse(cr, uid, tx_ids[0], context=context)
+
+        txr = self.pool.get('payment.transaction').browse(cr, uid, tx_ids[0], context=context)
 
         if status in ['Completed', 'Processed']:
-            _logger.info('Validated Electrum payment for tx %s: set as done' % (tx.reference))
+            _logger.info('Validated Faircoin Electrum payment for tx %s: set as done' % (tx.reference))
             data.update(state='done', date_validate=data.get('payment_date', fields.datetime.now()))
         elif status in ['Pending', 'Expired']:
-            _logger.info('Received notification for Electrum payment %s: set as cancelled' % (tx.reference))
+            _logger.info('Received notification for Faircoin Electrum payment %s: set as cancelled' % (tx.reference))
             data.update(state='cancel', state_message=data.get('cancelling_reason', ''))
 	elif status in ['']:
-            _logger.info('Validated transfer payment for tx %s: set as pending' % (tx.reference))
+            _logger.info('Validated faircoin payment for tx %s: set as pending' % (tx.reference))
             data.update(state='pending')
 	elif status in ['Draft']:
-            _logger.info('Validated transfer payment for tx %s: set as pending' % (tx.reference))
+            _logger.info('Validated faircoin payment for tx %s: set as pending' % (tx.reference))
             data.update(state='pending')
 	elif status in [None]:
-            _logger.info('Validated transfer payment for tx %s: set as pending' % (tx.reference))
+            _logger.info('Validated faircoin payment for tx %s: set as pending' % (tx.reference))
             data.update(state='pending')
         else:
-            error = 'Received unrecognized status for Electrum payment %s: %s, set as error' % (reference, status)
+            error = 'Received unrecognized status for Faircoin Electrum payment %s: %s, set as error' % (reference, status)
             _logger.info(error)
             data.update(state='error', state_message=error)
 
-        return tx.write(data)
+        return txr.write(data)
 
 
 
