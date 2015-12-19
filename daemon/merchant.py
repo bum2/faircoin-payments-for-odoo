@@ -104,6 +104,7 @@ def on_wallet_update():
 
         s = (value)/1.e6
         print "balance for %s:"%addr, s, requested_amount
+    
         if s>= requested_amount: 
             print "payment accepted", addr
             out_queue.put( ('payment', addr))
@@ -137,7 +138,7 @@ def process_request(amount, confirmations, expires_in, password, item_number):
         num += 1
         c, x, u = wallet.get_addr_balance(addr) 
         balance = c + x + u
-	print "Address : %s -- Balance: " %addr, balance
+	print "Address : %s -- Balance: " %addr, c, x, u
 
     out_queue.put( ('request', (addr, amount, confirmations, expires_in, item_number) ))
     return addr
@@ -239,7 +240,7 @@ def db_thread():
             paid = bool(paid)
             headers = {'content-type':'application/html'}
             data_json = { 'address':address, 'password':cb_password, 'paid':paid, 'item_number': item_number }
-            data_json = json.dumps(data_json)
+#            data_json = json.dumps(data_json)
             data_encoded =  urllib.urlencode(data_json)
 	    print "Data encoded : %s" %data_encoded
             url = received_url if paid else expired_url
@@ -251,6 +252,7 @@ def db_thread():
 		print response_stream.info()
                 print 'Got Response %s \n in %s for address %s' %(response_stream.read(), url, address)
                 cur.execute("UPDATE electrum_payments SET processed=1 WHERE oid=%d;"%(oid))
+                del pending_requests[addr]
             except urllib2.HTTPError as e:
                 print "ERROR: cannot do callback", data_json
 		print "ERROR: code : %s" %e.code
@@ -263,7 +265,7 @@ def db_thread():
                 print "ERROR: cannot do callback", data_json
 
 
-
+    
 
     conn.commit()
 
