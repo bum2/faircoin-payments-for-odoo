@@ -43,15 +43,9 @@ expired_url = config.get('callback','expired')
 cb_password = config.get('callback','password')
 
 wallet_path = config.get('electrum','wallet_path')
-xpub = config.get('electrum','xpub')
-#Fix Me : Move the needed of this to the config file
-seed = "travel nowhere air position hill peace suffer parent beautiful rise blood power home crumble teach"
-password = "secret"
-
-first_account_name = "account1"
-
-import_private_key = "a2wKE8HzrD2Hi1EWjY1zwaY391S3igKFL3CDMxUhUMak4nuYGFUm"
-import_key_address = "15mKKb2eos1hWa6tisdPwwDC1a5J1y9nma"
+#xpub = config.get('electrum','xpub')
+seed = config.get('electrum','seed')
+password = config.get('electrum', 'password')
 
 pending_requests = {}
 
@@ -291,7 +285,7 @@ if __name__ == '__main__':
         print "daemon is not connected"
         sys.exit(1)
 
-    # create watching_only wallet
+    # create wallet
     storage = electrum_fair.WalletStorage(wallet_path)
     if not storage.file_exists:
         print "creating wallet file"
