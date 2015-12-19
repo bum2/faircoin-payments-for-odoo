@@ -42,7 +42,7 @@ class AcquirerElectrum(osv.Model):
         return providers
 
     _columns = {
-        'electrum_email_account': fields.char('Electrum Email ID', required_if_provider='electrum'),
+        'electrum_seller_address': fields.char('Faircoin seller address', required_if_provider='electrum'),
         'electrum_seller_account': fields.char(
             'Electrum Merchant ID',
             help='The Merchant ID is used to ensure communications coming from Electrum are valid and secured.'),
@@ -72,13 +72,13 @@ class AcquirerElectrum(osv.Model):
           if company_electrum_account:
               company_electrum_ids = self.search(cr, uid, [('company_id', '=', company_id), ('provider', '=', 'electrum')], limit=1, context=context)
               if company_electrum_ids:
-                self.write(cr, uid, company_electrum_ids, {'electrum_email_account': company_electrum_account}, context=context)
+                self.write(cr, uid, company_electrum_ids, {'electrum_seller_address': company_electrum_account}, context=context)
               else:
                   electrum_view = self.pool['ir.model.data'].get_object(cr, uid, 'payment_electrum', 'electrum_acquirer_button')
                   self.create(cr, uid, {
                         'name': 'Electrum',
                         'provider': 'electrum',
-                        'electrum_email_account': company_electrum_account,
+                        'electrum_seller_address_account': company_electrum_account,
                         'view_template_id': electrum_view.id,
                     }, context=context)
       return True
@@ -111,22 +111,16 @@ class AcquirerElectrum(osv.Model):
 
         electrum_tx_values = dict(tx_values)
         electrum_tx_values.update({
-            'cmd': '_xclick',
-            'business': acquirer.electrum_email_account,
-            'item_name': '%s: %s' % (acquirer.company_id.name, tx_values['reference']),
+
+            'seller_address': acquirer.electrum_seller_address,
+
             'item_number': tx_values['reference'],
             'amount': tx_values['amount'],
             'currency_code': tx_values['currency'] and tx_values['currency'].name or '',
-            'address1': partner_values['address'],
-            'city': partner_values['city'],
-            'country': partner_values['country'] and partner_values['country'].name or '',
-            'state': partner_values['state'] and partner_values['state'].name or '',
-            'email': partner_values['email'],
-            'zip': partner_values['zip'],
-            'first_name': partner_values['first_name'],
-            'last_name': partner_values['last_name'],
-            'confirmations' : 6,
-            'expires_in' : 4, # en horas
+
+
+
+
             'password' : '',
             'return': '%s' % urlparse.urljoin(base_url, ElectrumController._return_url),
             'notify_url': '%s' % urlparse.urljoin(base_url, ElectrumController._notify_url),

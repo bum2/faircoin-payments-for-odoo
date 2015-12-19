@@ -47,6 +47,7 @@ wallet_path = config.get('electrum','wallet_path')
 seed = config.get('electrum','seed')
 password = config.get('electrum', 'password')
 market_address = config.get('market','FAI_address')
+market_fee = config.get('market','fee')
 
 pending_requests = {}
 
@@ -58,7 +59,7 @@ def check_create_table(conn):
     c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='electrum_payments';")
     data = c.fetchall()
     if not data: 
-        c.execute("""CREATE TABLE electrum_payments (address VARCHAR(40), amount FLOAT, confirmations INT(8), received_at TIMESTAMP, expires_at TIMESTAMP, paid INT(1), processed INT(1),item_number VARCHAR(24));""")
+        c.execute("""CREATE TABLE electrum_payments (address VARCHAR(40), amount FLOAT, confirmations INT(8), received_at TIMESTAMP, expires_at TIMESTAMP, paid INT(1), processed INT(1),item_number VARCHAR(24)),seller_address VARCHAR(34);""")
         conn.commit()
 
     c.execute("SELECT Count(address) FROM 'electrum_payments'")
@@ -76,7 +77,8 @@ def row_to_dict(x):
         'expires_at':x[5],
         'paid':x[6],
         'processed':x[7],
-	'item_number':x[8]
+	'item_number':x[8],
+	'seller_address':x[9]
     }
 
 
@@ -119,8 +121,8 @@ def do_stop(password):
     stopping = True
     return "ok"
 
-def process_request(amount, confirmations, expires_in, password, item_number):
-    print "Process request %s" %amount, confirmations, expires_in, password, item_number 	
+def process_request(amount, confirmations, expires_in, password, item_number, seller_address):
+    print "Process request %s" %amount, confirmations, expires_in, password, item_number, seller_address 	
     global num
     if password != my_password:
         return "wrong password"
@@ -140,7 +142,7 @@ def process_request(amount, confirmations, expires_in, password, item_number):
         balance = c + x + u
 	print "Address : %s -- Balance: " %addr, c, x, u
 
-    out_queue.put( ('request', (addr, amount, confirmations, expires_in, item_number) ))
+    out_queue.put( ('request', (addr, amount, confirmations, expires_in, item_number, seller_address) ))
     return addr
 
 
@@ -253,6 +255,8 @@ def db_thread():
                 print 'Got Response %s \n in %s for address %s' %(response_stream.read(), url, address)
                 cur.execute("UPDATE electrum_payments SET processed=1 WHERE oid=%d;"%(oid))
                 del pending_requests[addr]
+	    # Make the transaction to seller and market.
+	    
             except urllib2.HTTPError as e:
                 print "ERROR: cannot do callback", data_json
 		print "ERROR: code : %s" %e.code

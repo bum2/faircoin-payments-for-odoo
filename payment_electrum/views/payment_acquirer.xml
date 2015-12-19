@@ -11,7 +11,7 @@
                     <group attrs="{'invisible': [('provider', '!=', 'electrum')]}">
                         <group>
                             <group>
-                                <field name="electrum_email_account"/>
+                                <field name="electrum_seller_address"/>
                                 <field name="electrum_seller_account"/>
                                 <field name="electrum_use_ipn"/>
                                 <field name="electrum_api_enabled"

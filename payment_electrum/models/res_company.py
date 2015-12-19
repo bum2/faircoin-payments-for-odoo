@@ -16,7 +16,7 @@ class ResCompany(osv.Model):
         ], limit=1, context=context)
         if electrum_ids:
             electrum = Acquirer.browse(cr, uid, electrum_ids[0], context=context)
-            return dict.fromkeys(ids, electrum.electrum_email_account)
+            return dict.fromkeys(ids, electrum.electrum_seller_address)
         return dict.fromkeys(ids, False)
 
     def _set_electrum_account(self, cr, uid, id, name, value, arg, context=None):
@@ -25,11 +25,11 @@ class ResCompany(osv.Model):
         electrum_account = self.browse(cr, uid, id, context=context).electrum_account
         electrum_ids = Acquirer.search(cr, uid, [
             ('website_published', '=', True),
-            ('electrum_email_account', '=', electrum_account),
+            ('electrum_seller_address', '=', electrum_account),
             ('company_id', '=', company_id),
         ], context=context)
         if electrum_ids:
-            Acquirer.write(cr, uid, electrum_ids, {'electrum_email_account': value}, context=context)
+            Acquirer.write(cr, uid, electrum_ids, {'electrum_seller_address': value}, context=context)
         return True
 
     _columns = {
@@ -38,6 +38,6 @@ class ResCompany(osv.Model):
             fnct_inv=_set_electrum_account,
             nodrop=True,
             type='char', string='Electrum Account',
-            help="Electrum username (usually email) for receiving online payments."
+            help="Faircoin address of the seller where the faircoins will be sent."
         ),
     }

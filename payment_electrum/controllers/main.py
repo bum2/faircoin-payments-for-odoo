@@ -155,9 +155,10 @@ class ElectrumController(http.Controller):
         validate_url = electrum_urls['electrum_daemon_url']
 	amount = post.get('amount')
         headers = {'content-type':'application/json'}
-        data_json = { 'amount':amount, 'confirmations':'6','expires_in':'4', 'password':'','item_number':reference}
-        data_json = json.dumps(data_json)
-        _logger.info('Trying request %s' % data_json)  # debug
+
+
+
+
 
         server = jsonrpclib.Server(self.merchant_host)
         try:
@@ -168,7 +169,7 @@ class ElectrumController(http.Controller):
             return werkzeug.utils.redirect(return_url)
         try:
 	    # Here we go
-            address = f(amount, self.confirmations, self.expires_in, self.merchant_password, reference)
+            address = f(amount, self.confirmations, self.expires_in, self.merchant_password, reference, post.get('seller_address'))
         except socket.error, (value,message): 
             _logger.warning("ERROR: Can not connect with the Daemon %s:" %message)
             return_url = self._get_return_url(**post)

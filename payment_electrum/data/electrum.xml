@@ -10,7 +10,7 @@
             <field name="environment">test</field>
             <field name="pre_msg"><![CDATA[
                    <p>Instructions on Faircoin transaction after clicking on the payment button.</p>]]></field>
-            <field name="electrum_email_account">dummy</field>
+            <field name="electrum_seller_address">dummy</field>
             <field name="electrum_seller_account">dummy</field>
             <field name="electrum_api_username">dummy</field>
             <field name="electrum_api_password">dummy</field>
