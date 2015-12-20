@@ -59,7 +59,7 @@ def check_create_table(conn):
     c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='electrum_payments';")
     data = c.fetchall()
     if not data: 
-        c.execute("""CREATE TABLE electrum_payments (address VARCHAR(40), amount FLOAT, confirmations INT(8), received_at TIMESTAMP, expires_at TIMESTAMP, paid INT(1), processed INT(1),item_number VARCHAR(24)),seller_address VARCHAR(34);""")
+        c.execute("""CREATE TABLE electrum_payments (address VARCHAR(40), amount FLOAT, confirmations INT(8), received_at TIMESTAMP, expires_at TIMESTAMP, paid INT(1), processed INT(1),item_number VARCHAR(24),seller_address VARCHAR(34));""")
         conn.commit()
 
     c.execute("SELECT Count(address) FROM 'electrum_payments'")
