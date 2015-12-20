@@ -48,6 +48,7 @@ seed = config.get('electrum','seed')
 password = config.get('electrum', 'password')
 market_address = config.get('market','FAI_address')
 market_fee = config.get('market','fee')
+network_fee = config.get('network','fee')
 
 pending_requests = {}
 
@@ -235,10 +236,10 @@ def db_thread():
         cur.execute("""UPDATE electrum_payments set paid=0 WHERE expires_at < CURRENT_TIMESTAMP and paid is NULL;""")
 
         # do callback for addresses that received payment or expired
-        cur.execute("""SELECT oid, address, paid, item_number, seller_address from electrum_payments WHERE paid is not NULL and processed is NULL;""")
+        cur.execute("""SELECT oid, address, amount, paid, item_number, seller_address from electrum_payments WHERE paid is not NULL and processed is NULL;""")
         data = cur.fetchall()
         for item in data:
-            oid, address, paid, item_number, seller_address = item
+            oid, address, amount, paid, item_number, seller_address = item
             paid = bool(paid)
             headers = {'content-type':'application/html'}
             data_json = { 'address':address, 'password':cb_password, 'paid':paid, 'item_number': item_number }
@@ -253,10 +254,24 @@ def db_thread():
                 response_stream = urllib2.urlopen(req)
 #		print response_stream.info()
                 print 'Got Response %s \n in %s for address %s' %(response_stream.read(), url, address)
+	    # Make the transaction to seller and market.
+	    	if paid:     
+		    seller_total = float(amount) * (1 - float(market_fee))
+		    market_total = float(amount) * float(market_fee)
+                    print "Init transfers %s" %seller_address, amount, seller_total, market_total
+                    outputs = [('address', seller_address, seller_total)]
+# , ('address', market_address, float(market_total))]
+#                    coins = wallet.get_spendable_coins() # en debug no tiene fondos suficientes porque las confirmaciones son pocas. Meter address en el parentesis en produccion para que no interfieran en el resto de transacciones. Necesita que la cartera tenga algunos fairs antiguos como buffer de esta forma.
+		    # La biblioteca de electrum da error al estimar el fee de la red... Le proporcionamos uno fijo como workaround	
+#                    tx = wallet.make_unsigned_transaction(coins, outputs, float(network_fee)) # Esto lanza una excepcion NotEnoughFunds() si no hay suficientes fondos, como cogerla?
+#                    wallet.sign_transaction(tx, password)
+#def mktx(self, outputs, password, fee=None, change_addr=None, domain=None):
+		    tx = wallet.mktx(outputs, password, float(market_fee)) # outputs da un error de tipos en electrum_fair, de int a hex, ni idea por qué, quizá espera satoshis....
+                    rec_tx = wallet.sendtx(tx)
+                    print "Received tx : %s " %rec_tx
+          	#Mark processed the address
                 cur.execute("UPDATE electrum_payments SET processed=1 WHERE oid=%d;"%(oid))
                 del pending_requests[addr]
-	    # Make the transaction to seller and market.
-	    
             except urllib2.HTTPError as e:
                 print "ERROR: cannot do callback", data_json
 		print "ERROR: code : %s" %e.code
@@ -268,14 +283,12 @@ def db_thread():
                 print e
                 print "ERROR: cannot do callback", data_json
 
-
-    
-
     conn.commit()
 
     conn.close()
     print "database closed"
 
+ 
 
 
 if __name__ == '__main__':
@@ -312,6 +325,7 @@ if __name__ == '__main__':
 
     wallet.synchronize = lambda: None # prevent address creation by the wallet
     wallet.start_threads(network)
+    wallet.set_fee(market_fee)	
     network.register_callback('updated', on_wallet_update)
 
     threading.Thread(target=db_thread, args=()).start()
