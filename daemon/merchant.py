@@ -225,9 +225,9 @@ def db_thread():
 
         elif cmd == 'request':
             # add a new request to the table.
-            addr, amount, confs, minutes, item_number = params
-            sql = "INSERT INTO electrum_payments (address, amount, confirmations, received_at, expires_at, paid, processed, item_number)"\
-                + " VALUES ('%s', %.8f, %d, datetime('now'), datetime('now', '+%d Minutes'), NULL, NULL, '%s');"%(addr, amount, confs, minutes, item_number)
+            addr, amount, confs, minutes, item_number, seller_address = params
+            sql = "INSERT INTO electrum_payments (address, amount, confirmations, received_at, expires_at, paid, processed, item_number, seller_address)"\
+                + " VALUES ('%s', %.8f, %d, datetime('now'), datetime('now', '+%d Minutes'), NULL, NULL, '%s', '%s');"%(addr, amount, confs, minutes, item_number, seller_address)
 #            print sql
 
             cur.execute(sql)
@@ -235,10 +235,10 @@ def db_thread():
         cur.execute("""UPDATE electrum_payments set paid=0 WHERE expires_at < CURRENT_TIMESTAMP and paid is NULL;""")
 
         # do callback for addresses that received payment or expired
-        cur.execute("""SELECT oid, address, paid, item_number from electrum_payments WHERE paid is not NULL and processed is NULL;""")
+        cur.execute("""SELECT oid, address, paid, item_number, seller_address from electrum_payments WHERE paid is not NULL and processed is NULL;""")
         data = cur.fetchall()
         for item in data:
-            oid, address, paid, item_number = item
+            oid, address, paid, item_number, seller_address = item
             paid = bool(paid)
             headers = {'content-type':'application/html'}
             data_json = { 'address':address, 'password':cb_password, 'paid':paid, 'item_number': item_number }
@@ -251,7 +251,7 @@ def db_thread():
             req = urllib2.Request(url, data_encoded, headers)
             try:
                 response_stream = urllib2.urlopen(req)
-		print response_stream.info()
+#		print response_stream.info()
                 print 'Got Response %s \n in %s for address %s' %(response_stream.read(), url, address)
                 cur.execute("UPDATE electrum_payments SET processed=1 WHERE oid=%d;"%(oid))
                 del pending_requests[addr]
