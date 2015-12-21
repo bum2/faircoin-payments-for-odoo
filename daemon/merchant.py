@@ -27,6 +27,7 @@ import urllib
 
 import electrum_fair
 from electrum_fair import util
+from electrum_fair.util import NotEnoughFunds
 electrum_fair.set_verbosity(True)
 
 import ConfigParser
@@ -268,28 +269,31 @@ def db_thread():
             except ValueError, e:
                 print e
                 print "ERROR: cannot do callback", data_json
-
+        # Make the transfers...
         cur.execute("""SELECT oid, amount, seller_address from electrum_payments WHERE paid=1 and processed=1 and transferred=0;""")
         data = cur.fetchall()
         for item in data:
             oid, amount, seller_address = item
             seller_total = 1.e6 * float(amount) * (1 - float(market_fee))
 	    market_total = 1.e6 * float(amount) * float(market_fee)
-            print "Init transfer %s" %seller_address, amount, int(seller_total), market_total
-            outputs = [('address', seller_address, int(seller_total))]
-            try:  	
-	        tx = wallet.mktx(outputs, password, float(market_fee))
-	    except NotEnougFunds as e:
-	        print "Not enough funds confirmed to make the transaction. Delaying..."                
-                continue
-		    
+            seller_total = int(seller_total)
+            market_total = int(market_total)
+            c, u, x = wallet.get_balance()
+	    print "balance: %s " %c, u, x
+	    if (c > amount):
+	        print "Init transfer to %s" %seller_address, amount, seller_total 
+                outputs = [('address', seller_address, int(seller_total))]
+                try:  	
+	            tx = wallet.mktx(outputs, password)
+	        except NotEnoughFunds:
+	            print "Not enough funds confirmed to make the transaction. Delaying...%s" %c, u, x                
+        	    break
+	    else:
+         	break 	    
+
             rec_tx = wallet.sendtx(tx)
-            print "Received tx : %s " %rec_tx
-            cur.execute("UPDATE electrum_payments SET transeferred=1 WHERE oid=%d;"%(oid)) 
-
-
-            
-
+            cur.execute("UPDATE electrum_payments SET transferred=1 WHERE oid=%d;"%(oid)) 
+            print "Received tx : %s " %rec_tx	
     conn.commit()
 
     conn.close()
