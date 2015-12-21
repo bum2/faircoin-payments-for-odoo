@@ -26,6 +26,7 @@ import sqlite3
 import urllib
 
 import electrum_fair
+from electrum_fair import util
 electrum_fair.set_verbosity(True)
 
 import ConfigParser
@@ -43,7 +44,7 @@ expired_url = config.get('callback','expired')
 cb_password = config.get('callback','password')
 
 wallet_path = config.get('electrum','wallet_path')
-#xpub = config.get('electrum','xpub')
+
 seed = config.get('electrum','seed')
 password = config.get('electrum', 'password')
 market_address = config.get('market','FAI_address')
@@ -60,7 +61,7 @@ def check_create_table(conn):
     c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='electrum_payments';")
     data = c.fetchall()
     if not data: 
-        c.execute("""CREATE TABLE electrum_payments (address VARCHAR(40), amount FLOAT, confirmations INT(8), received_at TIMESTAMP, expires_at TIMESTAMP, paid INT(1), processed INT(1),item_number VARCHAR(24),seller_address VARCHAR(34));""")
+        c.execute("""CREATE TABLE electrum_payments (address VARCHAR(40), amount FLOAT, confirmations INT(8), received_at TIMESTAMP, expires_at TIMESTAMP, paid INT(1), processed INT(1),item_number VARCHAR(24),seller_address VARCHAR(34),transferred INT(1));""")
         conn.commit()
 
     c.execute("SELECT Count(address) FROM 'electrum_payments'")
@@ -79,7 +80,8 @@ def row_to_dict(x):
         'paid':x[6],
         'processed':x[7],
 	'item_number':x[8],
-	'seller_address':x[9]
+	'seller_address':x[9],
+	'transferred':x[10]
     }
 
 
@@ -123,7 +125,7 @@ def do_stop(password):
     return "ok"
 
 def process_request(amount, confirmations, expires_in, password, item_number, seller_address):
-    print "Process request %s" %amount, confirmations, expires_in, password, item_number, seller_address 	
+    print "New request : %s" %amount, confirmations, expires_in, password, item_number, seller_address 	
     global num
     if password != my_password:
         return "wrong password"
@@ -227,8 +229,8 @@ def db_thread():
         elif cmd == 'request':
             # add a new request to the table.
             addr, amount, confs, minutes, item_number, seller_address = params
-            sql = "INSERT INTO electrum_payments (address, amount, confirmations, received_at, expires_at, paid, processed, item_number, seller_address)"\
-                + " VALUES ('%s', %.8f, %d, datetime('now'), datetime('now', '+%d Minutes'), NULL, NULL, '%s', '%s');"%(addr, amount, confs, minutes, item_number, seller_address)
+            sql = "INSERT INTO electrum_payments (address, amount, confirmations, received_at, expires_at, paid, processed, item_number, seller_address, transferred)"\
+                + " VALUES ('%s', %.8f, %d, datetime('now'), datetime('now', '+%d Minutes'), NULL, NULL, '%s', '%s', 0);"%(addr, amount, confs, minutes, item_number, seller_address)
 #            print sql
 
             cur.execute(sql)
@@ -254,24 +256,8 @@ def db_thread():
                 response_stream = urllib2.urlopen(req)
 #		print response_stream.info()
                 print 'Got Response %s \n in %s for address %s' %(response_stream.read(), url, address)
-	    # Make the transaction to seller and market.
-	    	if paid:     
-		    seller_total = float(amount) * (1 - float(market_fee))
-		    market_total = float(amount) * float(market_fee)
-                    print "Init transfers %s" %seller_address, amount, seller_total, market_total
-                    outputs = [('address', seller_address, seller_total)]
-# , ('address', market_address, float(market_total))]
-#                    coins = wallet.get_spendable_coins() # en debug no tiene fondos suficientes porque las confirmaciones son pocas. Meter address en el parentesis en produccion para que no interfieran en el resto de transacciones. Necesita que la cartera tenga algunos fairs antiguos como buffer de esta forma.
-		    # La biblioteca de electrum da error al estimar el fee de la red... Le proporcionamos uno fijo como workaround	
-#                    tx = wallet.make_unsigned_transaction(coins, outputs, float(network_fee)) # Esto lanza una excepcion NotEnoughFunds() si no hay suficientes fondos, como cogerla?
-#                    wallet.sign_transaction(tx, password)
-#def mktx(self, outputs, password, fee=None, change_addr=None, domain=None):
-		    tx = wallet.mktx(outputs, password, float(market_fee)) # outputs da un error de tipos en electrum_fair, de int a hex, ni idea por qué, quizá espera satoshis....
-                    rec_tx = wallet.sendtx(tx)
-                    print "Received tx : %s " %rec_tx
-          	#Mark processed the address
                 cur.execute("UPDATE electrum_payments SET processed=1 WHERE oid=%d;"%(oid))
-                del pending_requests[addr]
+                del pending_requests[addr]		
             except urllib2.HTTPError as e:
                 print "ERROR: cannot do callback", data_json
 		print "ERROR: code : %s" %e.code
@@ -282,6 +268,27 @@ def db_thread():
             except ValueError, e:
                 print e
                 print "ERROR: cannot do callback", data_json
+
+        cur.execute("""SELECT oid, amount, seller_address from electrum_payments WHERE paid=1 and processed=1 and transferred=0;""")
+        data = cur.fetchall()
+        for item in data:
+            oid, amount, seller_address = item
+            seller_total = 1.e6 * float(amount) * (1 - float(market_fee))
+	    market_total = 1.e6 * float(amount) * float(market_fee)
+            print "Init transfer %s" %seller_address, amount, int(seller_total), market_total
+            outputs = [('address', seller_address, int(seller_total))]
+            try:  	
+	        tx = wallet.mktx(outputs, password, float(market_fee))
+	    except NotEnougFunds as e:
+	        print "Not enough funds confirmed to make the transaction. Delaying..."                
+                continue
+		    
+            rec_tx = wallet.sendtx(tx)
+            print "Received tx : %s " %rec_tx
+            cur.execute("UPDATE electrum_payments SET transeferred=1 WHERE oid=%d;"%(oid)) 
+
+
+            
 
     conn.commit()
 
@@ -325,7 +332,7 @@ if __name__ == '__main__':
 
     wallet.synchronize = lambda: None # prevent address creation by the wallet
     wallet.start_threads(network)
-    wallet.set_fee(market_fee)	
+#    wallet.set_fee(market_fee)	# entero base 10, pero cuantos ceros a la izquierda?
     network.register_callback('updated', on_wallet_update)
 
     threading.Thread(target=db_thread, args=()).start()
