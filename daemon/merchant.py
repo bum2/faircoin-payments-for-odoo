@@ -270,30 +270,36 @@ def db_thread():
                 print e
                 print "ERROR: cannot do callback", data_json
         # Make the transfers...
-        cur.execute("""SELECT oid, amount, seller_address from electrum_payments WHERE paid=1 and processed=1 and transferred=0;""")
+        cur.execute("""SELECT oid, address, amount, seller_address from electrum_payments WHERE paid=1 and processed=1 and transferred=0;""")
         data = cur.fetchall()
         for item in data:
-            oid, amount, seller_address = item
+            oid, address, amount, seller_address = item
             seller_total = 1.e6 * float(amount) * (1 - float(market_fee))
-	    market_total = 1.e6 * float(amount) * float(market_fee)
+	    market_total = 1.e6 * float(amount) * (float(market_fee))
             seller_total = int(seller_total)
             market_total = int(market_total)
-            c, u, x = wallet.get_balance()
-	    print "balance: %s " %c, u, x
-	    if (c > amount):
-	        print "Init transfer to %s" %seller_address, amount, seller_total 
-                outputs = [('address', seller_address, int(seller_total))]
-                try:  	
-	            tx = wallet.mktx(outputs, password)
-	        except NotEnoughFunds:
-	            print "Not enough funds confirmed to make the transaction. Delaying...%s" %c, u, x                
-        	    break
-	    else:
-         	break 	    
+#            c, u, x = wallet.get_addr_balance(address)
+#	    print "Balance for : %s " %address, c, u, x
+#	    if (c > amount):
+            print "Init transfer to %s" %seller_address, amount, seller_total 
+            output_seller = [('address', seller_address, int(seller_total))]
+            print "Init transfer to %s" %market_address, amount, market_total 
+            output_market = [('address', market_address, int(market_total))]
+            try:
+                tx_seller = wallet.mktx(output_seller, password)
+	        tx_market = wallet.mktx(output_market, password)
+	    except NotEnoughFunds:
+	        print "Not enough funds confirmed to make the transaction. Delaying..."
+        	break
+                
+#	    else:
+#         	break 	    
 
-            rec_tx = wallet.sendtx(tx)
+            rec_tx_seller = wallet.sendtx(tx_seller)
+	    rec_tx_market = wallet.sendtx(tx_market)
+# ToDo: Check the rec_tx are ok
             cur.execute("UPDATE electrum_payments SET transferred=1 WHERE oid=%d;"%(oid)) 
-            print "Received tx : %s " %rec_tx	
+            print "Send tx fo reference: %s " %oid
     conn.commit()
 
     conn.close()
@@ -310,6 +316,7 @@ if __name__ == '__main__':
         ret = send_command(cmd, params)
         sys.exit(ret)
 
+    out_queue = Queue.Queue()
     # start network
     c = electrum_fair.SimpleConfig({'wallet_path':wallet_path})
     daemon_socket = electrum_fair.daemon.get_daemon(c, True)
@@ -334,14 +341,16 @@ if __name__ == '__main__':
     else:
         wallet = electrum_fair.wallet.Wallet(storage)
 
-    wallet.synchronize = lambda: None # prevent address creation by the wallet
+#    wallet.synchronize = lambda: None # prevent address creation by the wallet
     wallet.start_threads(network)
 #    wallet.set_fee(market_fee)	# entero base 10, pero cuantos ceros a la izquierda?
+
+   
     network.register_callback('updated', on_wallet_update)
 
     threading.Thread(target=db_thread, args=()).start()
     
-    out_queue = Queue.Queue()
+
     # server thread
     from jsonrpclib.SimpleJSONRPCServer import SimpleJSONRPCServer
     server = SimpleJSONRPCServer(( my_host, my_port))

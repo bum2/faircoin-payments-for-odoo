@@ -11,6 +11,7 @@ import urllib2
 import urlparse
 import werkzeug
 import socket
+import qrcode
 
 import jsonrpclib
 
@@ -176,16 +177,12 @@ class ElectrumController(http.Controller):
             return werkzeug.utils.redirect(return_url)
     
         _logger.info('Faircoin address received %s' % address) # debug
-         
-
-
-	msg = "<h1>Faircoin payment</h1><br><br><p>Please complete the faircoin transaction as follows:</p><br><br><b>'address'</b>: %s <br><b>'amount'</b> : %s," %(address,amount)
-        # ToDo: Render the qr code
-	# Empty the cart
-	#order = request.website.sale_get_order()
-        #if order:
-            #for line in order.website_order_line:
-       
+	data = 'address : %s, amount : %s' %(address,amount
+	img = qrcode.make(data),         
+	img_file = reference + "-" + address + ".jpg"
+	img.save(img_file)
+	msg = '<h1>Faircoin payment</h1><br><br><p>Please complete the faircoin transaction as follows:</p><br><br><b>address</b>: %s <br><b>amount</b> : %s<br><br><img src="%s"><br><br><b><a href="%s"<Clik here to return to the shop</a>' %(address,amount,img_file)
+        # ToDo:  Empty the cart
  	
         request.registry['payment.transaction'].form_feedback(cr, uid, post, 'electrum', context)
 #        return werkzeug.utils.redirect(post.pop('return_url', '/payment/electrum/feedback/'))
