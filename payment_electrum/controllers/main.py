@@ -177,11 +177,17 @@ class ElectrumController(http.Controller):
             return werkzeug.utils.redirect(return_url)
     
         _logger.info('Faircoin address received %s' % address) # debug
-	data = 'address : %s, amount : %s' %(address,amount
+        
+        #import qrcode
+        label = urllib.parse.quote("fairmarket_order:%s" %(reference))
+        message = urllib.parse.quote("your payed devmarket.fair.coop product x")
+        
+	data = 'faircoin:%s?amount=%s&label=%s&message=%s' %(address,amount,label,message)
 	img = qrcode.make(data),         
-	img_file = reference + "-" + address + ".jpg"
+	img_file = reference + "-" + address + ".png"
 	img.save(img_file)
-	msg = '<h1>Faircoin payment</h1><br><br><p>Please complete the faircoin transaction as follows:</p><br><br><b>address</b>: %s <br><b>amount</b> : %s<br><br><img src="%s"><br><br><b><a href="%s"<Clik here to return to the shop</a>' %(address,amount,img_file)
+	
+	msg = '<h1>Faircoin payment</h1><br><br><p>Please complete the faircoin transaction as follows:</p><br><br><b>Address</b>: %s <br><b>Amount</b>: %s<br><br><img src="%s"><br><br>' %(address,amount,img_file) #<b><a href="%s">Clik here to return to the shop</a>' %(address,amount,img_file)
         # ToDo:  Empty the cart
  	
         request.registry['payment.transaction'].form_feedback(cr, uid, post, 'electrum', context)
